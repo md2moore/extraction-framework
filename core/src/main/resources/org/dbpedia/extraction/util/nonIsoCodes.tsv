@@ -1,0 +1,119 @@
+# this file lists all non-ISO language codes used in Wikipedia along with a related language they are mapped to
+# format is tab delimited, first field is Wikipedia code, second is ISO code, all further fields are ignored
+# all lines starting with a hash symbol at the first position are completely ignored
+ace	id	// Acehnese
+als	sq	// Tosk Albanian
+ang	en	// Anglo-Saxon / Old English
+arc	tr	// Assyrian Neo-Aramaic
+arz	ar	// Egyptian Arabic
+ast	es	// Asturian
+bar	de	// Bavarian
+bat-smg	lt	// Samogitian
+bcl	tl	// Central Bicolano
+be-x-old	be	// Belarusian (Taraskievica)
+bjn	id	
+bpy	bn	// Bishnupriya Manipuri
+bug	id	// Buginese
+bxr	ru	// Buryat
+cbk-zam	es	// Zamboanga Chavacano
+cdo	zh	// Min Dong
+ceb	tl	// Cebuano
+cho	en	// Choctaw
+chr	en	// Cherokee
+chy	en	// Cheyenne
+ckb	ku	// Sorani
+crh	tr	// Crimean Tatar
+csb	pl	// Kashubian
+cz	cs	
+diq	tr	// Zazaki
+dk	da	
+dsb	pl	// Lower Sorbian
+eml	it	// Emilian-Romagnol
+epo	eo	
+ext	es	// Extremaduran
+fiu-vro	et	// Voro
+frp	it	// Franco-Provencal
+frr	de	// North Frisian
+fur	it	// Friulian
+gag	tr	
+gan	zh	// Gan Chinese
+glk	fa	// Gilaki
+got	it	// Gothic --- Italian???
+hak	zh	// Hakka Chinese
+haw	en	// Hawaiian
+hif	hi	// Fiji Hindi
+hsb	pl	// Upper Sorbian
+ilo	tl	// Ilokano
+jbo	en	// Lojban
+jp	ja	
+kaa	uz	// Karakalpak
+kab	ar	// Kabyle
+kbd	ru	
+koi	ru	
+krc	ru	// Karachay-Balkar
+ksh	de	// Ripuarian
+lad	he	// Judaeo-Spanish
+lbe	ru	// Lak
+lez	ru	
+lij	it	// Ligurian
+lmo	it	// Lombard
+ltg	lv	
+map-bms	jv	// Banyumasan
+mdf	ru	// Moksha
+mhr	ru	// Mari
+min	zh	// Minangkabau TODO: not sure about this mappings
+minnan	zh	
+mo	ro	// Romanian language, mo was old now deprecated code
+mrj	ru
+mus	en	// Muscogee / Creek
+mwl	pt	// Mirandese
+myv	ru	// Erzya
+mzn	fa	// Mazandarani
+nah	es	// Nahuatl
+nan	zh	// redirect to zh-min-nan
+nap	it	// Neapolitan
+nds	de	// Low Saxon
+nds-nl	de	// Dutch Low Saxon  --- should probably map to nl
+new	ne	// Newar / Nepal Bhasa
+nov	ia	// Novial
+nrm	fr	// Norman
+nso	st	
+pag	tl	// Pangasinan
+pam	tl	// Kapampangan
+pap	pt	// Papiamento
+pcd	fr	// Picard
+pdc	de	// Pennsylvania German
+pfl	de	
+pih	en	// Norfuk
+pms	it	// Piedmontese
+pnb	pa	// Western Panjabi
+pnt	el	// Pontic Greek
+rmy	ro	// Romani
+roa-rup	ro	// Aromanian
+roa-tara	it	// Tarantino
+rue	uk	
+sah	ru	// Sakha
+scn	it	// Sicilian
+sco	en	// Scots
+sh	hr	// Serbo-Croatian (could also be sr)
+simple	en	// simple English
+srn	nl	// Sranan Tongo
+stq	de	// Saterland Frisian
+szl	pl	// Silesian
+tet	id	// Tetum
+tpi	en	// Tok Pisin
+tum	ny	// Tumbuka
+tyv	ru	// Tuvan
+udm	ru	// Udmurt
+vec	it	// Venetian
+vep	fi	
+vls	nl	// West Flemish
+war	tl	// Waray-Waray language
+wuu	zh	// Wu Chinese
+xal	ru	// Kalmyk
+xmf	ka	
+zea	nl	// Zeelandic
+zh-cfr	zh	
+zh-classical	zh	// Classical Chinese
+zh-min-nan	zh	// Minnan
+zh-yue	zh	// Cantonese

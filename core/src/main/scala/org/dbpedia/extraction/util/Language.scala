@@ -1,9 +1,16 @@
 package org.dbpedia.extraction.util
 
+import java.io.{InputStreamReader, BufferedReader}
+import java.net.URL
+import RichReader.wrapReader
 import java.util.Locale
+import scala.collection.immutable.HashSet
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import org.dbpedia.extraction.ontology.DBpediaNamespace
 import org.dbpedia.extraction.ontology.RdfNamespace
+
+import scala.io.{Codec, Source}
 
 /**
  * Represents a MediaWiki instance and the language used on it. Initially, this class was
@@ -19,10 +26,10 @@ import org.dbpedia.extraction.ontology.RdfNamespace
  * May be null, e.g. for mappings.
  * @param resourceUri Specific resource namespace for this language, e.g. "http://en.dbpedia.org/resource/"
  * or "http://www.wikidata.org/entity/". May be null, e.g. for mappings. The value is not a string.
- * Use resourceUri.append("Xy"), not string concatenation. 
+ * Use resourceUri.append("Xy"), not string concatenation.
  * @param propertyUri Specific property namespace for this language, e.g. "http://en.dbpedia.org/property/"
  * or "http://www.wikidata.org/entity/". May be null, e.g. for mappings. The value is not a string.
- * Use propertyUri.append("xy"), not string concatenation. 
+ * Use propertyUri.append("xy"), not string concatenation.
  * @param baseUri URI prefix for this wiki, e.g. "http://be-x-old.wikipedia.org",
  * "http://commons.wikimedia.org", "http://mappings.dbpedia.org".
  * @param apiUri API URI for this wiki, e.g. "http://be-x-old.wikipedia.org/w/api.php",
@@ -40,26 +47,26 @@ class Language private(
 )
 {
     val locale = new Locale(isoCode)
-    
-    /** 
+
+    /**
      * Wikipedia dump files use this prefix (with underscores), e.g. be_x_old, but
      * Wikipedia domains use the wikiCode (with dashes), e.g. http://be-x-old.wikipedia.org
      */
     val filePrefix = wikiCode.replace('-', '_')
-    
+
     /**
      */
     override def toString = "wiki="+wikiCode+",locale="+locale.getLanguage
-    
-    // no need to override equals() and hashCode() - there is only one object for each value, so equality means identity. 
+
+    // no need to override equals() and hashCode() - there is only one object for each value, so equality means identity.
 }
 
 object Language extends (String => Language)
 {
   implicit val wikiCodeOrdering = Ordering.by[Language, String](_.wikiCode)
-  
+
   val map: Map[String, Language] = locally {
-    
+
     def language(code : String, iso: String): Language = {
       new Language(
         code,
@@ -72,213 +79,117 @@ object Language extends (String => Language)
         "http://"+code+".wikipedia.org/w/api.php"
       )
     }
-    
+
     val languages = new HashMap[String,Language]
-    
-    // All two-letter codes from http://noc.wikimedia.org/conf/langlist as of 2012-04-15,
-    // minus the redirected codes cz,dk,jp,sh (they are in the nonIsoCodes map below)
-    // TODO: Automate this process. Or rather, download this list dynamically. Don't generate code.
-    val isoCodes = Set(
-      "aa","ab","af","ak","am","an","ar","as","av","ay","az","ba","be","bg","bh","bi","bm","bn",
-      "bo","br","bs","ca","ce","ch","co","cr","cs","cu","cv","cy","da","de","dv","dz","ee","el",
-      "en","eo","es","et","eu","fa","ff","fi","fj","fo","fr","fy","ga","gd","gl","gn","gu","gv",
-      "ha","he","hi","ho","hr","ht","hu","hy","hz","ia","id","ie","ig","ii","ik","io","is","it",
-      "iu","ja","jv","ka","kg","ki","kj","kk","kl","km","kn","ko","kr","ks","ku","kv","kw","ky",
-      "la","lb","lg","li","ln","lo","lt","lv","mg","mh","mi","mk","ml","mn","mo","mr","ms","mt",
-      "my","na","nb","ne","ng","nl","nn","no","nv","ny","oc","om","or","os","pa","pi","pl","ps",
-      "pt","qu","rm","rn","ro","ru","rw","sa","sc","sd","se","sg","si","sk","sl","sm","sn","so",
-      "sq","sr","ss","st","su","sv","sw","ta","te","tg","th","ti","tk","tl","tn","to","tr","ts",
-      "tt","tw","ty","ug","uk","ur","uz","ve","vi","vo","wa","wo","xh","yi","yo","za","zh","zu"
-    )
-    
+
+    // parse the list of language codes from file, the Locale class is not really suited for testing
+    // the language codes. Currently, we use a local copy of the list file.
+    var isoCodes = mutable.Set[String]()
+
+    val isoCodesSource = Source.fromURL("http://www.loc.gov/standards/iso639-2/ISO-639-2_utf-8.txt")(Codec.UTF8)
+    try {
+      isoCodesSource.getLines().foreach { line =>
+        if (!line.startsWith("#") && !line.trim.isEmpty) {
+          // we need the first three fields separately
+          val elements = line.split("\\|", 4)
+          isoCodes += elements(0) // add three-letter code
+          isoCodes += elements(2) // add two-letter code
+        }
+      }
+    }
+    finally {
+      isoCodesSource.close()
+    }
+
+
     // Maps Wikipedia language codes which do not follow ISO-639-1, to a related ISO-639-1 code.
     // See: http://s23.org/wikistats/wikipedias_html.php (and http://en.wikipedia.org/wiki/List_of_Wikipedias)
     // Mappings are mostly based on similarity of the languages and in some cases on the regions where a related language is spoken.
     // See NonIsoLanguagesMappingTest and run it regularly.
     // TODO: move these to a config file
     // TODO: is this map still necessary? Since JDK 7, Locale officially handles three-letter codes.
-    val nonIsoCodes = Map(
-      "ace" -> "id",           // Acehnese
-      "als" -> "sq",           // Tosk Albanian
-      "ang" -> "en",           // Anglo-Saxon / Old English
-      "arc" -> "tr",           // Assyrian Neo-Aramaic
-      "arz" -> "ar",           // Egyptian Arabic
-      "ast" -> "es",           // Asturian
-      "bar" -> "de",           // Bavarian
-      "bat-smg" -> "lt",       // Samogitian
-      "bcl" -> "tl",           // Central Bicolano
-      "be-x-old" -> "be",      // Belarusian (Taraskievica)
-      "bjn" -> "id",
-      "bpy" -> "bn",           // Bishnupriya Manipuri
-      "bug" -> "id",           // Buginese
-      "bxr" -> "ru",           // Buryat
-      "cbk-zam" -> "es",       // Zamboanga Chavacano
-      "cdo" -> "zh",           // Min Dong
-      "ceb" -> "tl",           // Cebuano
-      "cho" -> "en",           // Choctaw
-      "chr" -> "en",           // Cherokee
-      "chy" -> "en",           // Cheyenne
-      "ckb" -> "ku",           // Sorani
-      "crh" -> "tr",           // Crimean Tatar
-      "csb" -> "pl",           // Kashubian
-      "cz"  -> "cs",
-      "diq" -> "tr",           // Zazaki
-      "dk"  -> "da",
-      "dsb" -> "pl",           // Lower Sorbian
-      "eml" -> "it",           // Emilian-Romagnol
-      "epo" -> "eo",
-      "ext" -> "es",           // Extremaduran
-      "fiu-vro" -> "et",       // Voro
-      "frp" -> "it",           // Franco-Provencal
-      "frr" -> "de",           // North Frisian
-      "fur" -> "it",           // Friulian
-      "gag" -> "tr",
-      "gan" -> "zh",           // Gan Chinese
-      "glk" -> "fa",           // Gilaki
-      "got" -> "it",           // Gothic --- Italian???
-      "hak" -> "zh",           // Hakka Chinese
-      "haw" -> "en",           // Hawaiian
-      "hif" -> "hi",           // Fiji Hindi
-      "hsb" -> "pl",           // Upper Sorbian
-      "ilo" -> "tl",           // Ilokano
-      "jbo" -> "en",           // Lojban
-      "jp"  -> "ja",
-      "kaa" -> "uz",           // Karakalpak
-      "kab" -> "ar",           // Kabyle
-      "kbd" -> "ru",
-      "koi" -> "ru",
-      "krc" -> "ru",           // Karachay-Balkar
-      "ksh" -> "de",           // Ripuarian
-      "lad" -> "he",           // Judaeo-Spanish
-      "lbe" -> "ru",           // Lak
-      "lez" -> "ru",
-      "lij" -> "it",           // Ligurian
-      "lmo" -> "it",           // Lombard
-      "ltg" -> "lv",
-      "map-bms" -> "jv",       // Banyumasan
-      "mdf" -> "ru",           // Moksha
-      "mhr" -> "ru",           // Mari
-      "min" -> "zh",           // Minangkabau TODO: not sure about this mappings
-      "minnan" -> "zh",
-      "mrj" -> "ru",
-      "mus" -> "en",           // Muscogee / Creek
-      "mwl" -> "pt",           // Mirandese
-      "myv" -> "ru",           // Erzya
-      "mzn" -> "fa",           // Mazandarani
-      "nah" -> "es",           // Nahuatl
-      "nan" -> "zh",           // redirect to zh-min-nan
-      "nap" -> "it",           // Neapolitan
-      "nds" -> "de",           // Low Saxon
-      "nds-nl" -> "de",        // Dutch Low Saxon  --- should probably map to nl
-      "new" -> "ne",           // Newar / Nepal Bhasa
-      "nov" -> "ia",           // Novial
-      "nrm" -> "fr",           // Norman
-      "nso" -> "st",
-      "pag" -> "tl",           // Pangasinan
-      "pam" -> "tl",           // Kapampangan
-      "pap" -> "pt",           // Papiamento
-      "pcd" -> "fr",           // Picard
-      "pdc" -> "de",           // Pennsylvania German
-      "pfl" -> "de",
-      "pih" -> "en",           // Norfuk
-      "pms" -> "it",           // Piedmontese
-      "pnb" -> "pa",           // Western Panjabi
-      "pnt" -> "el",           // Pontic Greek
-      "rmy" -> "ro",           // Romani
-      "roa-rup" -> "ro",       // Aromanian
-      "roa-tara" -> "it",      // Tarantino
-      "rue" -> "uk",
-      "sah" -> "ru",           // Sakha
-      "scn" -> "it",           // Sicilian
-      "sco" -> "en",           // Scots
-      "sh" -> "hr",            // Serbo-Croatian (could also be sr)
-      "simple" -> "en",        // simple English
-      "srn" -> "nl",           // Sranan Tongo
-      "stq" -> "de",           // Saterland Frisian
-      "szl" -> "pl",           // Silesian
-      "tet" -> "id",           // Tetum
-      "tpi" -> "en",           // Tok Pisin
-      "tum" -> "ny",           // Tumbuka
-      "tyv" -> "ru",           // Tuvan
-      "udm" -> "ru",           // Udmurt
-      "vec" -> "it",           // Venetian
-      "vep" -> "fi",
-      "vls" -> "nl",           // West Flemish
-      "war" -> "tl",           // Waray-Waray language
-      "wuu" -> "zh",           // Wu Chinese
-      "xal" -> "ru",           // Kalmyk
-      "xmf" -> "ka",
-      "zea" -> "nl",           // Zeelandic
-      "zh-cfr" -> "zh",
-      "zh-classical" -> "zh",  // Classical Chinese
-      "zh-min-nan" -> "zh",    // Minnan
-      "zh-yue" -> "zh"         // Cantonese
-    )
-    
+    var nonIsoCodes: HashMap[String, String] = HashMap()
+    val nonIsoSource = Source
+      .fromInputStream(getClass.getResourceAsStream("/org/dbpedia/extraction/util/nonIsoCodes.tsv"))
+
+    try {
+      nonIsoSource.getLines().foreach { line =>
+        if (!line.startsWith("#")) {
+          val elements = line.split("\t", 3)
+          require(elements.size >= 2) // this should hold as long as the input file is valid
+
+          nonIsoCodes += elements(0) -> elements(1)
+        }
+      }
+    }
+    finally {
+      nonIsoSource.close()
+    }
+
     for (iso <- isoCodes) languages(iso) = language(iso, iso)
 
-    // We could throw an exception if the mapped ISO code is not in the set of ISO codes, but then 
-    // this class (and thus the whole system) wouldn't load, and that set may change depending on 
-    // JDK version, and the affected wiki code may not even be used. Just silently ignore it. 
+    // We could throw an exception if the mapped ISO code is not in the set of ISO codes, but then
+    // this class (and thus the whole system) wouldn't load, and that set may change depending on
+    // JDK version, and the affected wiki code may not even be used. Just silently ignore it.
     // TODO: let this loop build a list of codes with bad mappings and throw the exception later.
     for ((code, iso) <- nonIsoCodes) if (isoCodes.contains(iso)) languages(code) = language(code, iso)
-    
+
     languages("commons") =
-    new Language(
-      "commons",
-      "en",
-       // TODO: do DBpedia URIs make sense here? Do we use them at all? Maybe use null instead.
-      "commons.dbpedia.org",
-      "http://commons.dbpedia.org",
-      new DBpediaNamespace("http://commons.dbpedia.org/resource/"),
-      new DBpediaNamespace("http://commons.dbpedia.org/property/"),
-      "http://commons.wikimedia.org",
-      "http://commons.wikimedia.org/w/api.php"
-    )
-    
+      new Language(
+        "commons",
+        "en",
+        // TODO: do DBpedia URIs make sense here? Do we use them at all? Maybe use null instead.
+        "commons.dbpedia.org",
+        "http://commons.dbpedia.org",
+        new DBpediaNamespace("http://commons.dbpedia.org/resource/"),
+        new DBpediaNamespace("http://commons.dbpedia.org/property/"),
+        "http://commons.wikimedia.org",
+        "http://commons.wikimedia.org/w/api.php"
+      )
+
     languages("wikidata") =
-    new Language(
-      "wikidata",
-      "en",
-       // TODO: do DBpedia URIs make sense here? Do we use them at all? Maybe use null instead.
-      "wikidata.dbpedia.org",
-      "http://wikidata.dbpedia.org",
-      RdfNamespace.WIKIDATA,
-      RdfNamespace.WIKIDATA,
-      "http://www.wikidata.org",
-      "http://www.wikidata.org/w/api.php"
-    )
+      new Language(
+        "wikidata",
+        "en",
+        // TODO: do DBpedia URIs make sense here? Do we use them at all? Maybe use null instead.
+        "wikidata.dbpedia.org",
+        "http://wikidata.dbpedia.org",
+        RdfNamespace.WIKIDATA,
+        RdfNamespace.WIKIDATA,
+        "http://www.wikidata.org",
+        "http://www.wikidata.org/w/api.php"
+      )
 
 
 
 
 
     languages("mappings") =
-    new Language(
-      "mappings",
-      "en",
-      // No DBpedia / RDF namespaces for mappings wiki. 
-      "mappings.dbpedia.org",
-      "http://mappings.dbpedia.org",
-      RdfNamespace.MAPPINGS,
-      RdfNamespace.MAPPINGS,
-      "http://mappings.dbpedia.org",
-      "http://mappings.dbpedia.org/api.php"
-    )
+      new Language(
+        "mappings",
+        "en",
+        // No DBpedia / RDF namespaces for mappings wiki.
+        "mappings.dbpedia.org",
+        "http://mappings.dbpedia.org",
+        RdfNamespace.MAPPINGS,
+        RdfNamespace.MAPPINGS,
+        "http://mappings.dbpedia.org",
+        "http://mappings.dbpedia.org/api.php"
+      )
 
-    languages.toMap // toMap makes immutable
-  }
-  
+    languages.toMap
+  } // toMap makes immutable
+
   /**
    * English Wikipedia
    */
   val English = map("en")
-  
+
   /**
    * DBpedia mappings wiki
    */
   val Mappings = map("mappings")
-  
+
   /**
    * Wikimedia commons
    */
@@ -288,18 +199,18 @@ object Language extends (String => Language)
    * Wikimedia Wikidata
    */
   val Wikidata = map("wikidata")
-  
+
   /**
    * Gets a language object for a Wikipedia language code.
    * Throws IllegalArgumentException if language code is unknown.
    */
   def apply(code: String) : Language = map.getOrElse(code, throw new IllegalArgumentException("unknown language code "+code))
-  
+
   /**
    * Gets a language object for a Wikipedia language code, or None if given code is unknown.
    */
   def get(code: String) : Option[Language] = map.get(code)
-  
+
   /**
    * Gets a language object for a Wikipedia language code, or the default if the given code is unknown.
    */
