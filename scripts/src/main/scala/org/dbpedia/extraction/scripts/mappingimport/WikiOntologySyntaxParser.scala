@@ -42,9 +42,11 @@ object WikiOntologySyntaxParser extends RegexParsers {
     { case comments: List[CommentDefinition] => new FullCommentsDefinition(comments)}
 
   def singleCommentDefinition = "{{" ~ "comment" ~ "|" ~> languageCode ~ "|" ~ actualComment <~ "}}" ^^
-    { case lc ~ "|" ~ ac => new CommentDefinition(lc, ac)}
+    { case lc ~ "|" ~ ac  => new CommentDefinition(lc, ac)}
 
-  def actualComment = """[^}]*""".r
+  def actualComment =  rep(commentText | bracketEnclosedComment) ^^ {_.mkString("")}
+  def commentText = """[^}{]+""".r
+  def bracketEnclosedComment : Parser[String] = "{" ~ actualComment ~ "}" ^^ {case "{"~content~"}" => "{"+content.toString+"}"}
 
   // general predicate definitions, i.e., predicateName = value1[, value2, ...]
   def generalPredicateDefinition = predicateName ~ "=" ~ repsep(predicateTextObject, ",") ^^
@@ -81,7 +83,7 @@ object WikiOntologySyntaxParser extends RegexParsers {
     Elements used in ObjectProperty templates
    */
   def objectPropertyTemplate =
-    templateStartTag ~ "ObjectProperty" ~> repsep(objectPropertyTemplateContents, "|") <~ templateEndTag ^^
+    templateStartTag ~ "ObjectProperty" ~ "|" ~> repsep(objectPropertyTemplateContents, "|") <~ templateEndTag ^^
       { case contents: List[MappingElement] => new ObjectPropertyDefinition(contents)}
 
   def objectPropertyTemplateContents = labelsDefinition | commentsDefinition | generalPredicateDefinition
@@ -90,7 +92,7 @@ object WikiOntologySyntaxParser extends RegexParsers {
     Elements used in DatatypeProperty templates
    */
   def datatypePropertyTemplate =
-    templateStartTag ~ "DatatypeProperty" ~> repsep(datatypePropertyTemplateContents, "|") <~ templateEndTag ^^
+    templateStartTag ~ "DatatypeProperty" ~ "|" ~> repsep(datatypePropertyTemplateContents, "|") <~ templateEndTag ^^
       { case contents: List[MappingElement] => new DatatypePropertyDefinition(contents)}
 
   def datatypePropertyTemplateContents = labelsDefinition | commentsDefinition | generalPredicateDefinition
@@ -106,49 +108,58 @@ object WikiOntologySyntaxParser extends RegexParsers {
    * Tries to parse the given string as a ontology element definition represented in the Mappings wiki syntax.
    *
    * @param content string content to parse
+   * @param skipNonRelevant if true, the parser tries to find the first relevant template in the given input
    * @return result of the parsing run
    */
-  def parse(content: String) : Option[MappingElement] = {
-    val parsingResult = parseAll(rootNode, new StringReader(content))
-    if (parsingResult.isEmpty) {
-      Option.empty
+  def parse(content: String, skipNonRelevant : Boolean = true) : Option[MappingElement] = {
+    if (skipNonRelevant) {
+      var result = Option.empty
+      var index = content.indexOf("{{Class")
+      if (index == -1) {
+        index = content.indexOf("{{ObjectProperty")
+      }
+      if (index == -1) {
+        index = content.indexOf("{{DatatypeProperty")
+      }
+      val firstPart = content.substring(0, index)
+      val contentReader = new StringReader(content.substring(index))
+      val parseResult = parse(rootNode, contentReader)
+      parseResult match {
+        case Success(res, i) => Some(new
+            MappingElementList(List(new StringElement(firstPart), res, new StringElement(content.substring(index + i.offset)))))
+        case _ => Option.empty
+      }
+
     }
     else {
-      Some(parsingResult.get)
+      val parsingResult = parseAll(rootNode, new StringReader(content))
+      if (parsingResult.isEmpty) {
+        Option.empty
+      }
+      else {
+        Some(parsingResult.get)
+      }
     }
   }
 
   def main(args: Array[String]) {
-    val parseResult = parseAll(rootNode, """{{Class
+    val parseResult = parse("""'''{{Reserved for DBpedia}}'''
+                                           |
+                                           |{{DatatypeProperty
                                            || labels =
-                                           |{{label|el|Πληροφορίες προσώπου}}
-                                           |{{label|en|person}}
-                                           |{{label|eu|pertsona}}
-                                           |{{label|de|Person}}
-                                           |{{label|sl|Oseba}}
-                                           |{{label|it|persona}}
-                                           |{{label|pt|pessoa}}
-                                           |{{label|fr|personne}}
-                                           |{{label|es|persona}}
-                                           |{{label|ja|人_(法律)}}
-                                           |{{label|nl|persoon}}
-                                           |{{label|ar|شخص}}
-                                           || rdfs:subClassOf = Agent
-                                           || owl:equivalentClass =
-                                           | foaf:Person,
-                                           | schema:Person,
-                                           | wikidata:Q215627,
-                                           | wikidata:Q5
-                                           || specificProperties =
-                                           |{{SpecificProperty |
-                                           |ontologyProperty =
-                                           |weight | unit =
-                                           |kilogram }}
-                                           |                       {{SpecificProperty | ontologyProperty = height |
-                                           |                       unit =
-                                           |                       centimetre }}
-                                           |}}
-                                           | """.stripMargin)
+                                           |{{label|en|has abstract}}
+                                           |{{label|el|έχει περίληψη}}
+                                           |{{label|sr|апстракт}}
+                                           || comments =
+                                           |{{comment|en|Reserved for DBpedia. {{Reserved for DBpedia}}}}
+                                           |{{comment|el|Προορίζεται για την DBpedia. {{Reserved for DBpedia}}}}
+                                           || rdfs:range = rdf:langString
+                                           |
+                                           |
+                                           |
+                                           |
+                                           |
+                                           |}}""".stripMargin)
     println(parseResult)
     println(parseResult.get.getMappingSyntax())
   }

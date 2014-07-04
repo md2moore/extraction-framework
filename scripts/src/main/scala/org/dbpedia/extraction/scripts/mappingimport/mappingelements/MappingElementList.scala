@@ -7,7 +7,7 @@ import scala.language.implicitConversions
  *
  * @author Daniel Fleischhacker <daniel@informatik.uni-mannheim.de>
  */
-class MappingElementList(val elements: List[MappingElement]) {
+class MappingElementList(val elements: List[MappingElement]) extends MappingElement {
   def mkMappingString(start: String, sep: String, end: String): String = {
     val sb = new StringBuilder()
     var first = true
@@ -31,6 +31,19 @@ class MappingElementList(val elements: List[MappingElement]) {
 
   def mkMappingString(sep: String): String = {
     mkMappingString("", sep, "")
+  }
+
+  /**
+   * Return this element represented in the mapping Wiki syntax
+   *
+   * @return mapping Wiki syntax representation of this element
+   */
+  override def getMappingSyntax(): String = {
+    mkMappingString("\n")
+  }
+
+  override def toString(): String = {
+    elements.mkString("\n")
   }
 }
 
