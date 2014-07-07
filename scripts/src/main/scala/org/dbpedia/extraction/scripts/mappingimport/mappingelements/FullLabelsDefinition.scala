@@ -11,6 +11,6 @@ class FullLabelsDefinition(val labels: List[LabelDefinition]) extends MappingEle
   }
 
   override def getMappingSyntax(): String = {
-    labels.mkMappingString("labels=\n", "\n", "")
+    labels.mkMappingString("labels =\n\t", "\n\t", "")
   }
 }

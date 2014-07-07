@@ -99,4 +99,18 @@ object RdfNamespace {
     namespace.append(rest)
   }
 
+  /**
+   * Tries to use a prefix defined in this RdfNamespace for shortening the given URL.
+   *
+   * @param uri URI to shorten
+   * @return prefixed URI if prefix defined otherwise the full URI
+   */
+  def shortenWithPrefix(uri: String) : String = {
+    prefixMap.values.foreach { p =>
+      if (uri.startsWith(p.namespace)) {
+        return uri.replace(p.namespace, p.prefix + ":")
+      }
+    }
+    uri
+  }
 }

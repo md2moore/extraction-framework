@@ -11,6 +11,6 @@ class FullCommentsDefinition(val labels: List[CommentDefinition]) extends Mappin
   }
 
   override def getMappingSyntax(): String = {
-    labels.mkMappingString("comments=\n", "\n", "")
+    labels.mkMappingString("comments =\n\t", "\n\t", "")
   }
 }

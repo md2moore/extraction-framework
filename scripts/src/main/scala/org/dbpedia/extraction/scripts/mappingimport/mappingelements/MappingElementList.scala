@@ -1,5 +1,6 @@
 package org.dbpedia.extraction.scripts.mappingimport.mappingelements
 
+import scala.collection.mutable.ListBuffer
 import scala.language.implicitConversions
 
 /**
@@ -49,4 +50,5 @@ class MappingElementList(val elements: List[MappingElement]) extends MappingElem
 
 object MappingElementList {
   implicit def wrapMappingElementList(elements: List[MappingElement]) = new MappingElementList(elements)
+  implicit def wrapMappingElementList(elements: ListBuffer[MappingElement]) = new MappingElementList(elements.toList)
 }

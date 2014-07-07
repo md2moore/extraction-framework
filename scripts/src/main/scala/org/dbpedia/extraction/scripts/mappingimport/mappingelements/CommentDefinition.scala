@@ -9,6 +9,6 @@ class CommentDefinition(val languageCode: String, val commentText: String) exten
   }
 
   override def getMappingSyntax(): String = {
-    s"""{{label|$languageCode|$commentText}}"""
+    s"""{{comment|$languageCode|$commentText}}"""
   }
 }
