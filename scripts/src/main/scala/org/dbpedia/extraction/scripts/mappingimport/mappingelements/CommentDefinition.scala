@@ -11,4 +11,20 @@ class CommentDefinition(val languageCode: String, val commentText: String) exten
   override def getMappingSyntax(): String = {
     s"""{{comment|$languageCode|$commentText}}"""
   }
+
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[CommentDefinition]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: CommentDefinition =>
+      (that canEqual this) &&
+        languageCode == that.languageCode &&
+        commentText == that.commentText
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(languageCode, commentText)
+    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+  }
 }

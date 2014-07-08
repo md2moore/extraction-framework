@@ -46,6 +46,20 @@ class MappingElementList(val elements: List[MappingElement]) extends MappingElem
   override def toString(): String = {
     elements.mkString("\n")
   }
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[MappingElementList]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: MappingElementList =>
+      (that canEqual this) &&
+        elements == that.elements
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(elements)
+    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+  }
 }
 
 object MappingElementList {

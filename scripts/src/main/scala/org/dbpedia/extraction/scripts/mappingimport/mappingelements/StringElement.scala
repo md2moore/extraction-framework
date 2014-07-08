@@ -12,4 +12,17 @@ class StringElement(val content: String) extends MappingElement{
   override def getMappingSyntax(): String = content
 
   override def toString() : String = content
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[StringElement]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: StringElement =>
+      (that canEqual this) &&
+        content == that.content
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    content.hashCode
+  }
 }

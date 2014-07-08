@@ -16,4 +16,18 @@ class FullSpecificPropertiesDefinition(val specificProperties: List[SpecificProp
     // we try to indent all definitions following the first one so that they match the first one
     specificProperties.mkMappingString(prefix, "\n" + (" " * (prefix.length + 2)), "")
   }
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[FullSpecificPropertiesDefinition]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: FullSpecificPropertiesDefinition =>
+      (that canEqual this) &&
+        specificProperties == that.specificProperties
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(specificProperties)
+    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+  }
 }

@@ -7,7 +7,7 @@ import scala.collection.mutable.ListBuffer
 /**
  * Created by Daniel Fleischhacker <daniel@informatik.uni-mannheim.de> on 7/4/2014.
  */
-class ClassDefinition(val templateContents: ListBuffer[MappingElement]) extends MappingElement {
+class ClassDefinition(templateContents: ListBuffer[MappingElement]) extends RootNode(templateContents) {
   override def toString(): String = {
     templateContents.mkString("\t", "\n\t", "\n")
   }

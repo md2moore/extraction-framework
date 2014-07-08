@@ -1,5 +1,7 @@
 package org.dbpedia.extraction.scripts.mappingimport
 
+import java.util.logging.{Level, Logger}
+
 import net.sourceforge.jwbf.core.contentRep.Article
 import net.sourceforge.jwbf.mediawiki.bots.MediaWikiBot
 import org.dbpedia.extraction.ontology.io.OntologyReader
@@ -22,14 +24,14 @@ import scala.io.{Codec, Source}
  * However, it is easily possible to extend this to support other mapping types.
  *
  * @param mappingsWikiURL URL of the mapping Wiki to work on
- * @param user user name to authenticate in the wiki
- * @param password password to authenticate in the wiki
  *
  * @author Daniel Fleischhacker <daniel@informatik.uni-mannheim.de>
  */
-class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.apiUri, val user: String,
-                             val password: String) {
+class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.apiUri) {
   private val wiki = new MediaWikiBot(mappingsWikiURL)
+
+  private var username: Option[String] = None
+  private var password: Option[String] = None
 
   // pattern used to find triples in the input file
   private val ntriplesPattern = """^<([^>]+)>\s*<([^>]+)>\s*<([^>]+)>\s*\.$""".r("subject", "predicate", "object")
@@ -39,24 +41,25 @@ class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.api
     "http://www.w3.org/2002/07/owl#equivalentClass")
   private val propertyPredicates = Set("http://www.w3.org/2000/01/rdf-schema#subPropertyOf")
 
+  // disable logging from ontology reader to reduce noise in stdout
+  Logger.getLogger(classOf[OntologyReader].getName).setLevel(Level.SEVERE)
+
   /**
    * Processes the given ntriples file by adding all predicates defined in this file to the wiki pages corresponding to
    * the subjects.
    *
    * @param fileName path of file to process
    */
-  def importNTriplesFile(fileName: String) : String = {
-    val fileSource = Source.fromFile(fileName)(Codec.UTF8)
+  def importNTriplesFile(fileName: String): String = {
+    val source = Source.fromFile(fileName)(Codec.UTF8)
 
     val manualOperationLog = new StringBuilder()
 
-    fileSource.getLines().foreach { line =>
+    source.getLines().foreach { line =>
       val matcher = ntriplesPattern.findFirstMatchIn(line)
       matcher match {
-        case Some(ntriplesPattern(s, p, o)) if s.startsWith("http://dbpedia.org/ontology") && isClassStatement(p) =>
-          addClassDetail(s, p, o, manualOperationLog)
-        case Some(ntriplesPattern(s, p, o)) if s.startsWith("http://dbpedia.org/ontology") && isPropertyStatement(p) =>
-          addPropertyDetail(s, p, o, manualOperationLog)
+        case Some(ntriplesPattern(s, p, o)) if s.startsWith("http://dbpedia.org/ontology") =>
+          addStatement(s, p, o, manualOperationLog)
         case _ =>
       }
     }
@@ -65,30 +68,40 @@ class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.api
   }
 
   /**
-   * Adds the triple represented by `s`, `p` and `o` to the wiki page for the class subject `s`.
+   * Adds the triple represented by `s`, `p` and `o` to the wiki page for the subject `s`.
    *
    * @param s subject of the triple
    * @param p predicate of the triple
    * @param o object of the triple
    */
-  private def addClassDetail(s: String, p: String, o: String, manualOperationLog: StringBuilder): Unit = {
-    val shortPredicate = RdfNamespace.shortenWithPrefix(p)
-    val shortObject = RdfNamespace.shortenWithPrefix(o)
-    val className = s.replace("http://dbpedia.org/ontology/", "")
-    val article = wiki.getArticle(s"OntologyClass:$className")
-
-    if (article.getText.isEmpty) {
-      println(s"No article found for class $className, skipping")
+  private def addStatement(s: String, p: String, o: String, manualOperationLog: StringBuilder): Unit = {
+    val entityName = s.replace("http://dbpedia.org/ontology/", "")
+    val articleName = if (isClassStatement(p)) {
+      s"OntologyClass:$entityName"
     }
-    else if (!canSafelyModify(article)) {
-      println(s"Not able to safely modify $className, skipping")
-      manualOperationLog.append(
-        s"""* add predicate $shortPredicate with content $shortObject to page http://mappings.dbpedia.org/OntologyClass:$className""")
+    else if (isPropertyStatement(p)) {
+      s"OntologyProperty:$entityName"
     }
     else {
-      println(s"Processing class $className")
-      val shortPredicate = RdfNamespace.shortenWithPrefix(p)
-      val shortObject = RdfNamespace.shortenWithPrefix(o)
+      println(s"No article found for class $entityName, skipping")
+      return
+    }
+
+    val article = wiki.getArticle(articleName)
+    val shortPredicate = RdfNamespace.shortenWithPrefix(p)
+    val shortObject = RdfNamespace.shortenWithPrefix(o)
+
+    if (article.getText.isEmpty) {
+      println(s"No article found for with name $articleName, skipping")
+    }
+    else if (!canSafelyModify(article)) {
+      println(s"Not able to safely modify $articleName, skipping")
+      manualOperationLog.append(
+        s"""* add predicate $shortPredicate with content $shortObject to page http://mappings.dbpedia
+           |.org/$articleName""".stripMargin)
+    }
+    else {
+      println(s"Processing $articleName")
       val elements = WikiOntologySyntaxParser.parse(article.getText)
       val gpd = findGeneralPredicateDefinition(elements.get, shortPredicate)
       gpd match {
@@ -96,91 +109,31 @@ class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.api
           definition.values += shortObject
         }
         case _ => println("Not found general predicate definition for predicate, creating new one")
-          val classDef: ClassDefinition = elements.get match {
-            case i: ClassDefinition => i
-            case l: MappingElementList => l.elements.collectFirst { case i: ClassDefinition => i}.get
+          val rootDef: RootNode = elements.get match {
+            case i: RootNode => i
+            case l: MappingElementList => l.elements.collectFirst { case i: RootNode => i}.get
           }
-          classDef.templateContents += new GeneralPredicateDefinition(shortPredicate, ListBuffer(shortObject))
+          rootDef.templateContents += new GeneralPredicateDefinition(shortPredicate, ListBuffer(shortObject))
       }
-      println(elements.get.getMappingSyntax())
-    }
-  }
 
-  /**
-   * Adds the triple represented by `s`, `p` and `o` to the wiki page for the property subject `s`.
-   * This method downloads the corresponding article and checks whether the property is an object or a datatype
-   * property before calling either [[addObjectPropertyDetail( )]] or [[addDatatypePropertyDetail( )]].
-   *
-   * @param s subject of the triple
-   * @param p predicate of the triple
-   * @param o object of the triple
-   */
-  private def addPropertyDetail(s: String, p: String, o: String, manualOperationLog: StringBuilder): Unit = {
-    val shortPredicate = RdfNamespace.shortenWithPrefix(p)
-    val shortObject = RdfNamespace.shortenWithPrefix(o)
-    val propertyName = s.replace("http://dbpedia.org/ontology/", "")
-    val article = wiki.getArticle(s"OntologyProperty:$propertyName")
+      val mappingSyntax: String = elements.get.getMappingSyntax()
+      val originalElements = WikiOntologySyntaxParser.parse(article.getText)
 
-    if (article.getText.isEmpty) {
-      println(s"No article found for class $propertyName, skipping")
-    }
-    else if (!canSafelyModify(article)) {
-      println(s"Not able to safely modify $propertyName, skipping")
-      manualOperationLog.append(
-        s"""* add predicate $shortPredicate with content $shortObject to page http://mappings.dbpedia.org/OntologyProperty:$propertyName """)
-    }
-    else {
-      println(s"Processing class $propertyName")
-      val elements = WikiOntologySyntaxParser.parse(article.getText)
-      val gpd = findGeneralPredicateDefinition(elements.get, shortPredicate)
-
-      if (article.getText.contains("DatatypeProperty")) {
-        addDatatypePropertyDetail(elements, shortPredicate, shortObject, gpd)
+      if (originalElements == elements) {
+        println("No changes performed")
       }
-      else if (article.getText.contains("ObjectProperty")) {
-        addObjectPropertyDetail(elements, shortPredicate, shortObject, gpd)
-      }
-    }
-  }
-
-  /**
-   * Adds the triple represented by `s`, `p` and `o` to the wiki page for the object property subject `s`.
-   */
-  private def addObjectPropertyDetail(elements: Option[MappingElement], shortPredicate: String, shortObject: String,
-                                      gpd: Option[GeneralPredicateDefinition]): Unit = {
-    val gpd = findGeneralPredicateDefinition(elements.get, shortPredicate)
-    gpd match {
-      case Some(definition) => if (!definition.values.contains(shortObject)) {
-        definition.values += shortObject
-      }
-      case _ => println("Not found general predicate definition for predicate, creating new one")
-        val classDef: ObjectPropertyDefinition = elements.get match {
-          case i: ObjectPropertyDefinition => i
-          case l: MappingElementList => l.elements.collectFirst { case i: ObjectPropertyDefinition => i}.get
+      else {
+        if (!validateOntologyPage(mappingSyntax)) {
+          println(s"!!!!!!!!!!!!!!!!! ERROR: $articleName no longer validates after modification")
         }
-        classDef.templateContents += new GeneralPredicateDefinition(shortPredicate, ListBuffer(shortObject))
-    }
-    println(elements.get.getMappingSyntax())
-  }
+        else {
+          checkAuth()
 
-  /**
-   * Adds the triple represented by `s`, `p` and `o` to the wiki page for the datatype property subject `s`.
-   */
-  private def addDatatypePropertyDetail(elements: Option[MappingElement], shortPredicate: String, shortObject: String,
-                                        gpd: Option[GeneralPredicateDefinition]): Unit = {
-    val gpd = findGeneralPredicateDefinition(elements.get, shortPredicate)
-    gpd match {
-      case Some(definition) => if (!definition.values.contains(shortObject)) {
-        definition.values += shortObject
-      }
-      case _ => println("Not found general predicate definition for predicate, creating new one")
-        val classDef: DatatypePropertyDefinition = elements.get match {
-          case i: DatatypePropertyDefinition => i
-          case l: MappingElementList => l.elements.collectFirst { case i: DatatypePropertyDefinition => i}.get
+          article.setText(mappingSyntax)
+          article.save(s"Importing triple <$s> <$p> <$o>")
         }
-        classDef.templateContents += new GeneralPredicateDefinition(shortPredicate, ListBuffer(shortObject))
+      }
     }
-    println(elements.get.getMappingSyntax())
   }
 
   /**
@@ -197,34 +150,10 @@ class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.api
       case GeneralPredicateDefinition(n, v) if n == name => Some(element.asInstanceOf[GeneralPredicateDefinition])
       case l: MappingElementList => l.elements.map(findGeneralPredicateDefinition(_, name))
         .collectFirst { case Some(i) if i.isInstanceOf[GeneralPredicateDefinition] => i}
-      case e: ClassDefinition => e.templateContents.map(findGeneralPredicateDefinition(_, name))
-        .collectFirst { case Some(i) if i.isInstanceOf[GeneralPredicateDefinition] => i}
-      case e: ObjectPropertyDefinition => e.templateContents.map(findGeneralPredicateDefinition(_, name))
-        .collectFirst { case Some(i) if i.isInstanceOf[GeneralPredicateDefinition] => i}
-      case e: DatatypePropertyDefinition => e.templateContents.map(findGeneralPredicateDefinition(_, name))
+      case e: RootNode => e.templateContents.map(findGeneralPredicateDefinition(_, name))
         .collectFirst { case Some(i) if i.isInstanceOf[GeneralPredicateDefinition] => i}
       case _ => Option.empty
     }
-  }
-
-  /**
-   * Returns whether the given predicate is a class predicate. The classification is based on the type
-   * of the entity used in the subject position of the predicate.
-   *
-   * @param predicate predicate to check
-   */
-  private def isClassStatement(predicate: String): Boolean = {
-    classPredicates.contains(predicate)
-  }
-
-  /**
-   * Returns whether the given predicate is a class predicate. The classification is based on the type
-   * of the entity used in the subject position of the predicate.
-   *
-   * @param predicate predicate to check
-   */
-  private def isPropertyStatement(predicate: String): Boolean = {
-    propertyPredicates.contains(predicate)
   }
 
   /**
@@ -286,6 +215,22 @@ class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.api
   }
 
   /**
+   * Validates the given page using the ontology reader.
+   *
+   * @param content content to validate
+   * @return true if the parse is able to parse the given content otherwise false
+   */
+  private def validateOntologyPage(content: String): Boolean = {
+    try {
+      parseOntology("dummy", content)
+      true
+    }
+    catch {
+      case e: Exception => false
+    }
+  }
+
+  /**
    * Tries to shorten the given URI using a namespace identifier from RdfNamespace
    * @param uri URI to shorten
    * @return shortened URI or the original URI if no shortening possible
@@ -298,11 +243,56 @@ class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.api
       RdfNamespace.shortenWithPrefix(uri)
     }
   }
+
+  /**
+   * Returns whether the given predicate is a class predicate. The classification is based on the type
+   * of the entity used in the subject position of the predicate.
+   *
+   * @param predicate predicate to check
+   */
+  private def isClassStatement(predicate: String): Boolean = {
+    classPredicates.contains(predicate)
+  }
+
+  /**
+   * Returns whether the given predicate is a class predicate. The classification is based on the type
+   * of the entity used in the subject position of the predicate.
+   *
+   * @param predicate predicate to check
+   */
+  private def isPropertyStatement(predicate: String): Boolean = {
+    propertyPredicates.contains(predicate)
+  }
+
+  /**
+   * Sets the authentication data for the wiki.
+   * @param user username to authenticate in the wiki
+   * @param passwd password to authenticate in the wiki
+   */
+  def setAuthenticationData(user: String, passwd: String): Unit = {
+    username = Some(user)
+    password = Some(passwd)
+    wiki.login(username.get, password.get)
+
+    if (!wiki.isLoggedIn) {
+      throw new RuntimeException("Invalid credentials for mappings wiki")
+    }
+  }
+
+  /**
+   * Checks whether there is a user authenticated in the wiki and throws a RuntimeException if not.
+   * @throws RuntimeException if we are not authenticated in the wiki
+   */
+  private def checkAuth(): Unit = {
+    if (!wiki.isLoggedIn) {
+      throw new RuntimeException("Not logged in into wiki")
+    }
+  }
 }
 
 object ImportMappingsIntoWiki {
   def main(args: Array[String]) {
-    require(args != null && args.length == 3,
+    require(args != null && (args.length == 3 || args.length == 4),
       """
         |This script imports the triples contained in the given N-triples file into the mappings wiki.
         |The supported predicates are currently limited to subClass and equivalentClass statements and
@@ -314,13 +304,16 @@ object ImportMappingsIntoWiki {
         |for manual modification.
         |
         |Usage:
-        | <username> <password> <file>
+        | <username> <password> <file> [<backup dir>]
         |
         | username - username with editing rights for the mapping wiki
         | password - password for the wiki account
         | file - N-triples file containing the triples to import
+        | backup dir - directory to write back up data to
       """.stripMargin)
-    val importer = new ImportMappingsIntoWiki(user = args(0), password = args(1))
+    val importer = new ImportMappingsIntoWiki()
+
+    importer.setAuthenticationData(user = args(0), passwd = args(1))
 
     val manualLog = importer.importNTriplesFile(args(2))
 

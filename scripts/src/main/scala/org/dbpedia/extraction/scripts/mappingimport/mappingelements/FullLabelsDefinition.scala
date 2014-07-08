@@ -13,4 +13,18 @@ class FullLabelsDefinition(val labels: List[LabelDefinition]) extends MappingEle
   override def getMappingSyntax(): String = {
     labels.mkMappingString("labels =\n\t", "\n\t", "")
   }
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[FullLabelsDefinition]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: FullLabelsDefinition =>
+      (that canEqual this) &&
+        labels == that.labels
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(labels)
+    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+  }
 }

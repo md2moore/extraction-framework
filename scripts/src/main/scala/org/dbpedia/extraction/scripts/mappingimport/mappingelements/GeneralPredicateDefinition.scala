@@ -14,6 +14,22 @@ class GeneralPredicateDefinition(val predicateName: String, val values: ListBuff
   override def getMappingSyntax(): String = {
     predicateName + " = " + values.mkString(", ")
   }
+
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[GeneralPredicateDefinition]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: GeneralPredicateDefinition =>
+      (that canEqual this) &&
+        predicateName == that.predicateName &&
+        values == that.values
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(predicateName, values)
+    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+  }
 }
 
 object GeneralPredicateDefinition {

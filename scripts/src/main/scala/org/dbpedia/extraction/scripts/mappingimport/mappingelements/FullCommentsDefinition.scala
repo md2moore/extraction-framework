@@ -13,4 +13,18 @@ class FullCommentsDefinition(val labels: List[CommentDefinition]) extends Mappin
   override def getMappingSyntax(): String = {
     labels.mkMappingString("comments =\n\t", "\n\t", "")
   }
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[FullCommentsDefinition]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: FullCommentsDefinition =>
+      (that canEqual this) &&
+        labels == that.labels
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(labels)
+    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+  }
 }
