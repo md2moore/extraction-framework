@@ -68,6 +68,12 @@ class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.api
   }
 
   /**
+   * The summary message generator for this importer. Summary message generators get the triple which was added to
+   * the wiki as parameter and are used to generate a message which describing the change in the Wiki's article page log.
+   */
+  var generateSummaryMessage: (String, String, String) => String = generateDefaultSummaryMessage
+
+  /**
    * Adds the triple represented by `s`, `p` and `o` to the wiki page for the subject `s`.
    *
    * @param s subject of the triple
@@ -130,10 +136,25 @@ class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.api
           checkAuth()
 
           article.setText(mappingSyntax)
-          article.save(s"Importing triple <$s> <$p> <$o>")
+          article.save(generateSummaryMessage(s,p,o))
         }
       }
     }
+  }
+
+  /**
+   * Default implementation for generating summary messages
+   */
+  def generateDefaultSummaryMessage(s: String, p: String, o: String) : String = {
+    s"Automatic import of triple <$s> <$p> <$o>"
+  }
+
+  /**
+   * Simple replacing summary generator which takes a message string and replaces all occurrences
+   * of the patterns $SUBJECT$, $OBJECT$ and $PREDICATE$ by the values of the current triple.
+   */
+  def generateReplacingSummaryMessage(message: String, s: String, p: String, o: String) : String = {
+    message.replaceAll("\\$SUBJECT\\$", s).replaceAll("\\$PREDICATE\\$", p).replaceAll("\\$OBJECT\\$", o)
   }
 
   /**
@@ -303,20 +324,31 @@ object ImportMappingsIntoWiki {
         |statements contained in the Wiki page. In these cases, a message is printed giving instructions
         |for manual modification.
         |
+        |The optional parameter message is used as a template for the summary message when saving a
+        |modified article. In this message, the variables $SUBJECT$, $OBJECT$ and $PREDICATE$ can be used
+        |which are replaced by the actual triple.
+        |
         |Usage:
-        | <username> <password> <file> [<backup dir>]
+        | <username> <password> <file> [<message>]
         |
         | username - username with editing rights for the mapping wiki
         | password - password for the wiki account
         | file - N-triples file containing the triples to import
-        | backup dir - directory to write back up data to
+        | message - summary message to write in modified articles' logs
       """.stripMargin)
     val importer = new ImportMappingsIntoWiki()
+
+    if (args.length == 4) {
+      importer.generateSummaryMessage = importer.generateReplacingSummaryMessage(args(3), _, _, _)
+    }
 
     importer.setAuthenticationData(user = args(0), passwd = args(1))
 
     val manualLog = importer.importNTriplesFile(args(2))
 
-    println("Modifications which have to be performed manually:" + manualLog)
+    println(
+      "\n\n********************************************************************\n\tModifications which have to be " +
+        "performed manually:" +
+        manualLog)
   }
 }
