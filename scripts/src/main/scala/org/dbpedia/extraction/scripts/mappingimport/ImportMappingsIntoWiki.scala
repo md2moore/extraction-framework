@@ -33,6 +33,17 @@ class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.api
   private var username: Option[String] = None
   private var password: Option[String] = None
 
+  /**
+   * Number of milliseconds to pause after a wiki modification operation
+   */
+  var sleepTime : Int = 0
+
+  /**
+   * Number of lines to skip in the import file. This is helpful if the import process stops in the middle of the
+   * import.
+   */
+  var skipLines : Option[Int] = None
+
   // pattern used to find triples in the input file
   private val ntriplesPattern = """^<([^>]+)>\s*<([^>]+)>\s*<([^>]+)>\s*\.$""".r("subject", "predicate", "object")
 
@@ -55,12 +66,17 @@ class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.api
 
     val manualOperationLog = new StringBuilder()
 
+    var lineNumber = 0
+
     source.getLines().foreach { line =>
-      val matcher = ntriplesPattern.findFirstMatchIn(line)
-      matcher match {
-        case Some(ntriplesPattern(s, p, o)) if s.startsWith("http://dbpedia.org/ontology") =>
-          addStatement(s, p, o, manualOperationLog)
-        case _ =>
+      lineNumber += 1
+      if (skipLines.getOrElse(0) < lineNumber) {
+        val matcher = ntriplesPattern.findFirstMatchIn(line)
+        matcher match {
+          case Some(ntriplesPattern(s, p, o)) if s.startsWith("http://dbpedia.org/ontology") =>
+            addStatement(s, p, o, manualOperationLog)
+          case _ =>
+        }
       }
     }
 
@@ -104,7 +120,7 @@ class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.api
       println(s"Not able to safely modify $articleName, skipping")
       manualOperationLog.append(
         s"""* add predicate $shortPredicate with content $shortObject to page http://mappings.dbpedia
-           |.org/$articleName""".stripMargin)
+           |.org/$articleName\n""".stripMargin)
     }
     else {
       println(s"Processing $articleName")
@@ -313,7 +329,7 @@ class ImportMappingsIntoWiki(val mappingsWikiURL: String = Language.Mappings.api
 
 object ImportMappingsIntoWiki {
   def main(args: Array[String]) {
-    require(args != null && (args.length == 3 || args.length == 4),
+    require(args != null && (args.length == 3 || args.length == 4 || args.length == 5),
       """
         |This script imports the triples contained in the given N-triples file into the mappings wiki.
         |The supported predicates are currently limited to subClass and equivalentClass statements and
@@ -329,17 +345,24 @@ object ImportMappingsIntoWiki {
         |which are replaced by the actual triple.
         |
         |Usage:
-        | <username> <password> <file> [<message>]
+        | <username> <password> <file> [<message> <skiplines>]
         |
         | username - username with editing rights for the mapping wiki
         | password - password for the wiki account
         | file - N-triples file containing the triples to import
-        | message - summary message to write in modified articles' logs
+        | message - summary message to write in modified articles' logs or NULL to use default message
+        | skiplines - number of lines to skip in the import file
       """.stripMargin)
     val importer = new ImportMappingsIntoWiki()
 
-    if (args.length == 4) {
+    // we wait 5 secs between two modifications
+    importer.sleepTime = 5000
+
+    if (args.length == 4 && args(3) != "NULL") {
       importer.generateSummaryMessage = importer.generateReplacingSummaryMessage(args(3), _, _, _)
+    }
+    if (args.length == 5) {
+      importer.skipLines = Some(args(4).toInt)
     }
 
     importer.setAuthenticationData(user = args(0), passwd = args(1))
