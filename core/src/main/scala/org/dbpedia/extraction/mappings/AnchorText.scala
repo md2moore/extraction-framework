@@ -30,27 +30,16 @@ class AnchorText (
     val list = AnchorText.collectInternalLinks(node)
     var buffer = new ListBuffer[Quad]()
     for (nodes <- list) {
-      if(nodes.children.length > 1){
-        if(!getUri(nodes.destination).contains("File:")){
+        if(nodes.destination.namespace == Namespace.Main) {
           val concated = nodes.children.map(_.toPlainText).mkString("")
           buffer += new Quad(context.language, DBpediaDatasets.AnchorText, getUri(nodes.destination), wikiPageWikiLinkProperty, concated, nodes.sourceUri, context.ontology.datatypes("rdf:langString"))
         }
-        for(child <- nodes.children){
-          child match
-          {
-            case intlink : InternalLinkNode => buffer += new Quad(context.language, DBpediaDatasets.AnchorText, getUri(intlink.destination), wikiPageWikiLinkProperty, intlink.children(0).toPlainText, nodes.sourceUri, context.ontology.datatypes("rdf:langString"))
-            case _ =>
+          for (child <- nodes.children) {
+            child match {
+              case intlink: InternalLinkNode => if(nodes.destination.namespace == Namespace.Main) buffer += new Quad(context.language, DBpediaDatasets.AnchorText, getUri(intlink.destination), wikiPageWikiLinkProperty, intlink.children(0).toPlainText, nodes.sourceUri, context.ontology.datatypes("rdf:langString"))
+              case _ =>
+            }
           }
-        }
-      }
-      else {
-        for (child <- nodes.children) {
-          //if (child.isInstanceOf[InternalLinkNode]) {
-
-          //}
-            buffer += new Quad(context.language, DBpediaDatasets.AnchorText, getUri(nodes.destination), wikiPageWikiLinkProperty, child.toPlainText, nodes.sourceUri, context.ontology.datatypes("rdf:langString"))
-        }
-      }
     }
     //list.map(link => new Quad(context.language, DBpediaDatasets.PageLinks, subjectUri, wikiPageWikiLinkProperty, node.children(0).toWikiText, link.sourceUri, null))
     val list2 = buffer.toList
